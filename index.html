@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>播放清單比較工具</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #111; min-height: 100vh; }
+.app { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; }
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: #666; margin-bottom: 2rem; }
+.auth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 2rem; }
+.auth-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 1.25rem; }
+.auth-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.platform-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.sp-icon { background: #1DB954; }
+.yt-icon { background: #FF0000; }
+.platform-name { font-size: 15px; font-weight: 500; }
+.auth-status { font-size: 12px; color: #888; margin-bottom: 12px; min-height: 18px; }
+.auth-status.connected { color: #1a7a3a; font-weight: 500; }
+.auth-status.error { color: #c0392b; }
+.btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-family: inherit; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid #ccc; background: #fff; color: #111; transition: background 0.15s; white-space: nowrap; }
+.btn:hover { background: #f5f5f5; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-sp { background: #1DB954; border-color: #1DB954; color: #fff; }
+.btn-sp:hover { background: #17a349; }
+.btn-yt { background: #FF0000; border-color: #FF0000; color: #fff; }
+.btn-yt:hover { background: #d90000; }
+.btn-primary { background: #111; border-color: #111; color: #fff; }
+.btn-primary:hover { background: #333; }
+.playlist-select { width: 100%; font-size: 13px; font-family: inherit; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px 10px; background: #fff; color: #111; margin-top: 8px; display: none; }
+.playlist-select.show { display: block; }
+.compare-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.results { display: flex; flex-direction: column; gap: 16px; }
+.result-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; }
+.result-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #fafafa; border-bottom: 1px solid #f0f0f0; }
+.badge { font-size: 11px; padding: 3px 10px; border-radius: 99px; font-weight: 500; }
+.badge-sp { background: #e8faf0; color: #0a6e2f; }
+.badge-yt { background: #ffe8e8; color: #a31010; }
+.badge-match { background: #e8f4ff; color: #0a4fa3; }
+.result-title { font-size: 13px; font-weight: 500; }
+.result-count { font-size: 12px; color: #888; margin-left: auto; }
+.song-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid #f5f5f5; }
+.song-row:last-child { border-bottom: none; }
+.song-num { font-size: 11px; color: #bbb; min-width: 20px; }
+.song-title { font-size: 13px; font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-artist { font-size: 12px; color: #888; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+.stat-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px; text-align: center; }
+.stat-num { font-size: 24px; font-weight: 500; }
+.stat-label { font-size: 11px; color: #888; margin-top: 2px; }
+.loading { text-align: center; padding: 2rem; color: #888; font-size: 13px; }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #e0e0e0; border-top-color: #888; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.notice { font-size: 12px; color: #666; background: #f9f9f9; border-radius: 8px; padding: 8px 12px; margin-bottom: 1.5rem; line-height: 1.6; border: 1px solid #eee; }
+@media (max-width: 500px) { .auth-grid { grid-template-columns: 1fr; } .stats-row { grid-template-columns: repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>播放清單比較工具</h1>
+  <p class="subtitle">登入 Spotify 和 YouTube，選擇清單後自動比較差異</p>
+
+  <div class="notice">
+    ⚠️ 使用前請先到 Google Cloud Console，將你的 Google 帳號加入 OAuth 測試使用者名單（憑證 → OAuth 同意畫面 → 測試使用者），否則 YouTube 登入會被擋。
+  </div>
+
+  <div class="auth-grid">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="platform-icon sp-icon">S</div>
+        <span class="platform-name">Spotify</span>
+      </div>
+      <div class="auth-status" id="sp-status">尚未登入</div>
+      <button class="btn btn-sp" id="sp-login-btn" onclick="loginSpotify()">登入 Spotify</button>
+      <select class="playlist-select" id="sp-playlist" onchange="onPlaylistSelect()">
+        <option value="">選擇播放清單…</option>
+      </select>
+    </div>
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="platform-icon yt-icon">Y</div>
+        <span class="platform-name">YouTube</span>
+      </div>
+      <div class="auth-status" id="yt-status">尚未登入</div>
+      <button class="btn btn-yt" id="yt-login-btn" onclick="loginYouTube()">登入 YouTube</button>
+      <select class="playlist-select" id="yt-playlist" onchange="onPlaylistSelect()">
+        <option value="">選擇播放清單…</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="compare-section">
+    <button class="btn btn-primary" id="compare-btn" onclick="compare()" disabled>開始比較</button>
+    <span id="compare-hint" style="font-size:12px;color:#888;">請先登入兩個平台並各選一個清單</span>
+  </div>
+
+  <div id="results-area"></div>
+</div>
+
+<script>
+const SPOTIFY_CLIENT_ID = '9e7254d9a7ed4770b5c6ed68f5e489d9';
+const YOUTUBE_CLIENT_ID = '766640999592-71tihhfc8b4sh1ps0mgj18olkemo09n7.apps.googleusercontent.com';
+const REDIRECT_URI = window.location.href.split('?')[0].split('#')[0];
+
+let spToken = null, ytToken = null;
+let spPlaylists = [], ytPlaylists = [];
+
+function loginSpotify() {
+  const params = new URLSearchParams({
+    client_id: SPOTIFY_CLIENT_ID,
+    response_type: 'token',
+    redirect_uri: REDIRECT_URI,
+    scope: 'playlist-read-private playlist-read-collaborative',
+    state: 'spotify'
+  });
+  window.location.href = 'https://accounts.spotify.com/authorize?' + params;
+}
+
+function loginYouTube() {
+  const params = new URLSearchParams({
+    client_id: YOUTUBE_CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'token',
+    scope: 'https://www.googleapis.com/auth/youtube.readonly',
+    state: 'youtube'
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+}
+
+function parseHash() {
+  const hash = window.location.hash.substring(1);
+  if (!hash) return;
+  const params = new URLSearchParams(hash);
+  const token = params.get('access_token');
+  const state = params.get('state');
+  if (!token) return;
+  history.replaceState(null, '', window.location.pathname);
+  if (state === 'spotify') {
+    spToken = token;
+    setStatus('sp', '已登入，正在載入清單…', false);
+    document.getElementById('sp-login-btn').disabled = true;
+    loadSpotifyPlaylists();
+  } else if (state === 'youtube') {
+    ytToken = token;
+    setStatus('yt', '已登入，正在載入清單…', false);
+    document.getElementById('yt-login-btn').disabled = true;
+    loadYouTubePlaylists();
+  }
+}
+
+function setStatus(platform, msg, isError) {
+  const el = document.getElementById(platform + '-status');
+  el.textContent = msg;
+  el.className = 'auth-status' + (isError ? ' error' : (msg.includes('已登入') || msg.includes('清單已載入') ? ' connected' : ''));
+}
+
+async function loadSpotifyPlaylists() {
+  try {
+    let items = [], url = 'https://api.spotify.com/v1/me/playlists?limit=50';
+    while (url) {
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + spToken } });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message);
+      items = items.concat(d.items);
+      url = d.next;
+    }
+    spPlaylists = items;
+    const sel = document.getElementById('sp-playlist');
+    items.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name + ' (' + p.tracks.total + ' 首)';
+      sel.appendChild(o);
+    });
+    sel.classList.add('show');
+    setStatus('sp', '清單已載入，請選擇', false);
+  } catch(e) {
+    setStatus('sp', '載入失敗：' + e.message, true);
+  }
+}
+
+async function loadYouTubePlaylists() {
+  try {
+    let items = [], pageToken = '';
+    do {
+      const url = 'https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=50' + (pageToken ? '&pageToken=' + pageToken : '');
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + ytToken } });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message);
+      items = items.concat(d.items);
+      pageToken = d.nextPageToken || '';
+    } while (pageToken);
+    ytPlaylists = items;
+    const sel = document.getElementById('yt-playlist');
+    items.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.snippet.title + ' (' + p.contentDetails.itemCount + ' 首)';
+      sel.appendChild(o);
+    });
+    sel.classList.add('show');
+    setStatus('yt', '清單已載入，請選擇', false);
+  } catch(e) {
+    setStatus('yt', '載入失敗：' + e.message, true);
+  }
+}
+
+function onPlaylistSelect() {
+  const spSel = document.getElementById('sp-playlist').value;
+  const ytSel = document.getElementById('yt-playlist').value;
+  const btn = document.getElementById('compare-btn');
+  const hint = document.getElementById('compare-hint');
+  if (spSel && ytSel) {
+    btn.disabled = false;
+    hint.textContent = '點擊開始比較兩個清單';
+  } else {
+    btn.disabled = true;
+    hint.textContent = '請先登入兩個平台並各選一個清單';
+  }
+}
+
+async function fetchSpotifyTracks(playlistId) {
+  let tracks = [], url = 'https://api.spotify.com/v1/playlists/' + playlistId + '/tracks?limit=100&fields=next,items(track(name,artists))';
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + spToken } });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message);
+    d.items.forEach(item => {
+      if (item.track && item.track.name) {
+        tracks.push({ title: item.track.name, artist: item.track.artists.map(a => a.name).join(', ') });
+      }
+    });
+    url = d.next;
+  }
+  return tracks;
+}
+
+async function fetchYouTubeTracks(playlistId) {
+  let tracks = [], pageToken = '';
+  do {
+    const url = 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=' + playlistId + (pageToken ? '&pageToken=' + pageToken : '');
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + ytToken } });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message);
+    d.items.forEach(item => {
+      const title = item.snippet.title;
+      if (title && title !== 'Deleted video' && title !== 'Private video') {
+        const parsed = parseYTTitle(title);
+        tracks.push(parsed);
+      }
+    });
+    pageToken = d.nextPageToken || '';
+  } while (pageToken);
+  return tracks;
+}
+
+function parseYTTitle(title) {
+  const sep = title.includes(' - ') ? ' - ' : (title.includes(' – ') ? ' – ' : null);
+  if (sep) {
+    const parts = title.split(sep);
+    return { title: parts.slice(1).join(sep).trim(), artist: parts[0].trim(), raw: title };
+  }
+  return { title: title.trim(), artist: '', raw: title };
+}
+
+function normalize(str) {
+  return str.toLowerCase()
+    .replace(/\(.*?\)/g, '').replace(/\[.*?\]/g, '')
+    .replace(/feat\..*|ft\..*|featuring.*/gi, '')
+    .replace(/[^\w\s\u4e00-\u9fff\u3040-\u30ff]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function similarity(a, b) {
+  a = normalize(a); b = normalize(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.9;
+  const wa = new Set(a.split(' ').filter(w => w.length > 1));
+  const wb = new Set(b.split(' ').filter(w => w.length > 1));
+  const inter = [...wa].filter(w => wb.has(w)).length;
+  const union = new Set([...wa, ...wb]).size;
+  return union === 0 ? 0 : inter / union;
+}
+
+function songScore(a, b) {
+  const t = similarity(a.title, b.title);
+  if (a.artist && b.artist) return t * 0.65 + similarity(a.artist, b.artist) * 0.35;
+  return t;
+}
+
+async function compare() {
+  const spId = document.getElementById('sp-playlist').value;
+  const ytId = document.getElementById('yt-playlist').value;
+  const area = document.getElementById('results-area');
+  area.innerHTML = '<div class="loading"><span class="spinner"></span>正在載入歌曲，請稍候…</div>';
+  document.getElementById('compare-btn').disabled = true;
+
+  try {
+    const [spTracks, ytTracks] = await Promise.all([fetchSpotifyTracks(spId), fetchYouTubeTracks(ytId)]);
+    const THRESHOLD = 0.65;
+    const spNotInYt = [], ytNotInSp = [], matched = [];
+    const ytMatched = new Set();
+
+    for (const s of spTracks) {
+      let best = null, bestScore = 0;
+      for (const y of ytTracks) {
+        const sc = songScore(s, y);
+        if (sc > bestScore) { bestScore = sc; best = y; }
+      }
+      if (bestScore >= THRESHOLD) { matched.push({ sp: s, yt: best, score: bestScore }); ytMatched.add(best); }
+      else spNotInYt.push({ song: s, bestScore });
+    }
+    for (const y of ytTracks) {
+      if (!ytMatched.has(y)) ytNotInSp.push({ song: y });
+    }
+
+    let html = `<div class="stats-row">
+      <div class="stat-card"><div class="stat-num">${spTracks.length}</div><div class="stat-label">Spotify 歌曲</div></div>
+      <div class="stat-card"><div class="stat-num">${ytTracks.length}</div><div class="stat-label">YouTube 歌曲</div></div>
+      <div class="stat-card"><div class="stat-num">${matched.length}</div><div class="stat-label">配對成功</div></div>
+      <div class="stat-card"><div class="stat-num">${spNotInYt.length + ytNotInSp.length}</div><div class="stat-label">缺少歌曲</div></div>
+    </div><div class="results">`;
+
+    if (spNotInYt.length) {
+      html += `<div class="result-card"><div class="result-header"><span class="badge badge-sp">Spotify 獨有</span><span class="result-title">Spotify 有但 YouTube 沒有</span><span class="result-count">${spNotInYt.length} 首</span></div>`;
+      spNotInYt.forEach((item, i) => {
+        html += `<div class="song-row"><span class="song-num">${i+1}</span><span class="song-title">${esc(item.song.title)}</span><span class="song-artist">${esc(item.song.artist)}</span></div>`;
+      });
+      html += `</div>`;
+    }
+    if (ytNotInSp.length) {
+      html += `<div class="result-card"><div class="result-header"><span class="badge badge-yt">YouTube 獨有</span><span class="result-title">YouTube 有但 Spotify 沒有</span><span class="result-count">${ytNotInSp.length} 首</span></div>`;
+      ytNotInSp.forEach((item, i) => {
+        html += `<div class="song-row"><span class="song-num">${i+1}</span><span class="song-title">${esc(item.song.title)}</span><span class="song-artist">${esc(item.song.artist)}</span></div>`;
+      });
+      html += `</div>`;
+    }
+    if (matched.length) {
+      html += `<div class="result-card"><div class="result-header"><span class="badge badge-match">已配對</span><span class="result-title">兩個清單都有的歌曲</span><span class="result-count">${matched.length} 首</span></div>`;
+      matched.sort((a,b)=>b.score-a.score).forEach((item, i) => {
+        html += `<div class="song-row"><span class="song-num">${i+1}</span><span class="song-title">${esc(item.sp.title)}</span><span class="song-artist">${esc(item.sp.artist)}</span></div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+    area.innerHTML = html;
+  } catch(e) {
+    area.innerHTML = `<div class="loading" style="color:#c0392b;">比較失敗：${e.message}</div>`;
+  }
+  document.getElementById('compare-btn').disabled = false;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+parseHash();
+</script>
+</body>
+</html>
